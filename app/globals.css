@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Premium Light Theme Variables */
+    --background: 215 28% 97%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 214 32% 92%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 214 32% 92%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 214 32% 92%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 90%;
+    --input: 214 32% 90%;
+    --ring: 221 83% 53%;
+    --radius: 0.75rem;
+
+    /* Theme Custom Tokens */
+    --surface-bg: 210 40% 98%;
+    --clock-rim: 214 32% 90%;
+    --clock-ticks: 215 16% 47%;
+    --clock-labels: 222 47% 11%;
+    --clock-hub: 0 0% 100%;
+    --clock-hub-border: 214 32% 85%;
+    --clock-divider: 222 47% 11%;
+    --clock-handle-bar: 222 47% 15%;
+  }
+
+  .dark {
+    /* Premium Dark Theme Variables */
+    --background: 224 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 32% 16%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 32% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 32% 18%;
+    --input: 217 32% 18%;
+    --ring: 217 91% 60%;
+
+    /* Theme Custom Tokens */
+    --surface-bg: 224 47% 6%;
+    --clock-rim: 217 32% 18%;
+    --clock-ticks: 215 20% 65%;
+    --clock-labels: 210 40% 98%;
+    --clock-hub: 222 47% 10%;
+    --clock-hub-border: 217 32% 22%;
+    --clock-divider: 0 0% 100%;
+    --clock-handle-bar: 210 40% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-primary/20;
+  }
+
+  /* Custom responsive scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-md border border-border/80 shadow-sm rounded-xl transition-all duration-200;
+  }
+
+  .app-header {
+    @apply sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border/80 transition-colors duration-200;
+  }
+}
+
+.clock-arc {
+  transition: opacity 0.2s ease-in-out, filter 0.2s ease-in-out;
+}
+
+.clock-arc:hover {
+  filter: brightness(1.15);
+}
+
+.task-item {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+
+.task-item:hover {
+  transform: translateY(-1px);
+}
