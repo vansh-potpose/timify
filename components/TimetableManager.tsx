@@ -7,7 +7,6 @@ import TimetableCard from './TimetableCard';
 import TimetableForm from './TimetableForm';
 import { Button } from '@/components/ui/button';
 import { Plus, Calendar } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface TimetableManagerProps {
   onTimetableSelect: (timetable: Timetable) => void;
@@ -24,7 +23,6 @@ export default function TimetableManager({
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<'create' | 'edit' | 'copy'>('create');
   const [editingTimetable, setEditingTimetable] = useState<Timetable | null>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     loadTimetables();
@@ -48,11 +46,6 @@ export default function TimetableManager({
       }
     } catch (error) {
       console.error('Error loading timetables:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load timetables',
-        variant: 'destructive',
-      });
     } finally {
       setLoading(false);
     }
@@ -78,20 +71,11 @@ export default function TimetableManager({
       const newTimetable = await timetableService.createTimetable(data);
       setTimetables(prev => [...prev, newTimetable]);
       
-      toast({
-        title: 'Success',
-        description: 'Timetable created successfully',
-      });
       
       // Auto-select the new timetable
       onTimetableSelect(newTimetable);
     } catch (error) {
       console.error('Error creating timetable:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create timetable',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -113,17 +97,8 @@ export default function TimetableManager({
         onTimetableSelect(updatedTimetable);
       }
       
-      toast({
-        title: 'Success',
-        description: 'Timetable updated successfully',
-      });
     } catch (error) {
       console.error('Error updating timetable:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update timetable',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -138,10 +113,6 @@ export default function TimetableManager({
       
       setTimetables(prev => [...prev, copiedTimetable]);
       
-      toast({
-        title: 'Success',
-        description: 'Timetable copied successfully with all tasks',
-      });
       
       // Auto-select the copied timetable
       onTimetableSelect(copiedTimetable);
@@ -150,11 +121,6 @@ export default function TimetableManager({
       loadTaskCounts();
     } catch (error) {
       console.error('Error copying timetable:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to copy timetable',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -172,17 +138,8 @@ export default function TimetableManager({
         }
       }
       
-      toast({
-        title: 'Success',
-        description: 'Timetable deleted successfully',
-      });
     } catch (error) {
       console.error('Error deleting timetable:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete timetable',
-        variant: 'destructive',
-      });
     }
   };
 
@@ -283,3 +240,4 @@ export default function TimetableManager({
     </div>
   );
 }
+

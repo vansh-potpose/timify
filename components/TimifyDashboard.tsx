@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import CircularClock from './CircularClock';
@@ -9,7 +9,7 @@ import TimetableManager from './TimetableManager';
 import { ThemeToggle } from './ThemeToggle';
 import { Task, taskService } from '@/lib/taskService';
 import { Timetable, timetableService } from '@/lib/timetableService';
-import { Clock, BarChart3, Plus, Calendar, Eye, EyeOff, Printer, Sparkles } from 'lucide-react';
+import { Clock, BarChart3, Plus, Calendar, Eye, EyeOff, Printer, Sparkles, Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { minutesToTimeString, findOverlappingTask, formatTime } from '@/lib/time-utils';
 
@@ -68,7 +68,7 @@ export default function TimifyDashboard() {
 
     const conflict = findOverlappingTask(taskData.start_time, taskData.end_time, tasks);
     if (conflict) {
-      alert(`Cannot add task "${taskData.name}": Overlaps with existing task "${conflict.name}" (${formatTime(conflict.start_time)} – ${formatTime(conflict.end_time)})`);
+      alert(`Cannot add task "${taskData.name}": Overlaps with existing task "${conflict.name}" (${formatTime(conflict.start_time)} â€“ ${formatTime(conflict.end_time)})`);
       return;
     }
 
@@ -96,7 +96,7 @@ export default function TimifyDashboard() {
   const updateTask = async (updatedTask: Task) => {
     const conflict = findOverlappingTask(updatedTask.start_time, updatedTask.end_time, tasks, updatedTask.id);
     if (conflict) {
-      alert(`Cannot update task "${updatedTask.name}": Overlaps with existing task "${conflict.name}" (${formatTime(conflict.start_time)} – ${formatTime(conflict.end_time)})`);
+      alert(`Cannot update task "${updatedTask.name}": Overlaps with existing task "${conflict.name}" (${formatTime(conflict.start_time)} â€“ ${formatTime(conflict.end_time)})`);
       return;
     }
 
@@ -160,7 +160,54 @@ export default function TimifyDashboard() {
     setTimeout(() => {
       setHighlightedTaskId(null);
     }, 3000);
+  };  // ---- Import / Export ----
+  const handleExport = () => {
+    const data = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      timetables: timetableService.getAllTimetablesRaw(),
+      tasks: taskService.getAllTasksRaw(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timify-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data.timetables || !data.tasks) {
+          alert('Invalid backup file: missing timetables or tasks data.');
+          return;
+        }
+        if (!confirm(`This will replace ALL your current data with the imported backup (${data.timetables.length} timetables, ${data.tasks.length} tasks). Continue?`)) {
+          return;
+        }
+        timetableService.importTimetables(data.timetables);
+        taskService.importTasks(data.tasks);
+        // Reload the page to reflect imported data
+        window.location.reload();
+      } catch (err) {
+        alert('Failed to import: Invalid JSON file.');
+        console.error('Import error:', err);
+      }
+    };
+    input.click();
+  };
+
 
   if (loading) {
     return (
@@ -262,6 +309,26 @@ export default function TimifyDashboard() {
                   >
                     <Printer className="w-3.5 h-3.5 sm:mr-1.5" />
                     <span className="hidden sm:inline">Print</span>
+                  </Button>
+                  <Button
+                    onClick={handleExport}
+                    variant="ghost"
+                    size="sm"
+                    className="inline-flex text-xs sm:text-sm whitespace-nowrap text-muted-foreground hover:text-foreground"
+                    title="Export all data"
+                  >
+                    <Download className="w-3.5 h-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Export</span>
+                  </Button>
+                  <Button
+                    onClick={handleImport}
+                    variant="ghost"
+                    size="sm"
+                    className="inline-flex text-xs sm:text-sm whitespace-nowrap text-muted-foreground hover:text-foreground"
+                    title="Import data from backup"
+                  >
+                    <Upload className="w-3.5 h-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Import</span>
                   </Button>
                 </nav>
 
