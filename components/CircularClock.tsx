@@ -18,6 +18,8 @@ import {
 } from '@/lib/time-utils';
 import { PRESET_CATEGORIES, PRESET_COLORS } from './data';
 import {
+  Maximize2,
+  Minimize2,
   Scissors,
   Plus,
   Trash2,
@@ -131,10 +133,22 @@ export default function CircularClock({
 
   // Responsive mobile screen check for clock labels
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isMobileFullscreen, setIsMobileFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isMobile && isMobileFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobile, isMobileFullscreen]);
 
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 640);
+      setIsMobile(window.innerWidth < 768);
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -408,6 +422,7 @@ export default function CircularClock({
 
   // Pointer Down on Circumference Ring to Create Task
   const handleRingPointerDown = (e: React.PointerEvent) => {
+    if (isMobile && !isMobileFullscreen) return;
     if (activeTool === 'split') return;
     initDragCenter();
     const { angle, time, snappedLabel } = calculateTimeFromClientPos(e.clientX, e.clientY);
@@ -424,6 +439,7 @@ export default function CircularClock({
 
   // Start Bar Handle Pointer Down
   const handleStartResize = (e: React.PointerEvent, task: Task) => {
+    if (isMobile && !isMobileFullscreen) return;
     e.stopPropagation();
     initDragCenter();
     const { angle, time, snappedLabel } = calculateTimeFromClientPos(
@@ -443,6 +459,7 @@ export default function CircularClock({
 
   // End Bar Handle Pointer Down
   const handleEndResize = (e: React.PointerEvent, task: Task) => {
+    if (isMobile && !isMobileFullscreen) return;
     e.stopPropagation();
     initDragCenter();
     const { angle, time, snappedLabel } = calculateTimeFromClientPos(
@@ -462,6 +479,7 @@ export default function CircularClock({
 
   // Move Arc Pointer Down
   const handleMoveArcStart = (e: React.PointerEvent, task: Task) => {
+    if (isMobile && !isMobileFullscreen) return;
     e.stopPropagation();
     if (activeTool === 'split') return;
     initDragCenter();
@@ -488,6 +506,14 @@ export default function CircularClock({
   // Task Click (Select / Split)
   const handleTaskArcClick = (e: React.MouseEvent, task: Task) => {
     e.stopPropagation();
+    if (isMobile && !isMobileFullscreen) {
+      setSelectedTask(task);
+      setEditFormData(task);
+      setIsEditingSelected(false);
+      setIsMobileFullscreen(true);
+      onTaskClick?.(task);
+      return;
+    }
     initDragCenter();
     if (activeTool === 'split') {
       const { time } = calculateTimeFromClientPos(e.clientX, e.clientY);
@@ -725,7 +751,7 @@ export default function CircularClock({
   }, [dragState, clockHover, period, isAMPeriod, currentDragOverlap]);
 
   // Render Drag-to-Create Sharp Preview Arc
-  let previewArcElement = null;
+  let previewArcElement: React.ReactNode = null;
   if (dragState && dragState.type === 'create') {
     const isClockwise =
       (dragState.currentAngle - dragState.startAngle + 360) % 360 <= 180;
@@ -1071,7 +1097,7 @@ export default function CircularClock({
   });
 
   // Live Radial Needle Indicator
-  let liveNeedleElement = null;
+  let liveNeedleElement: React.ReactNode = null;
   if (livePointerInfo) {
     const rad = (livePointerInfo.angle * Math.PI) / 180;
     const nx = center + radius * Math.cos(rad);
@@ -1104,8 +1130,600 @@ export default function CircularClock({
     );
   }
 
+  // Responsive viewBox for SVG
+  const clockViewBox = isMobile
+    ? showLabels
+      ? '-50 -10 480 400'
+      : '-10 -10 400 400'
+    : '0 0 380 380';
+
+  // Helper function to render SVG Clock content
+  const renderClockSvg = (interactive: boolean) => (
+    <svg
+      ref={interactive ? svgRef : undefined}
+      viewBox={clockViewBox}
+      className={`w-full ${
+        isMobile ? 'max-w-[430px]' : 'max-w-[380px] sm:max-w-[400px]'
+      } h-auto aspect-square overflow-visible mx-auto select-none ${
+        interactive
+          ? activeTool === 'split'
+            ? 'cursor-cell touch-none'
+            : dragState?.type === 'move-arc'
+            ? 'cursor-grabbing touch-none'
+            : 'cursor-crosshair touch-none'
+          : 'touch-pan-y cursor-pointer'
+      }`}
+      onPointerDown={interactive ? handleRingPointerDown : undefined}
+      onPointerMove={
+        interactive
+          ? (e) => {
+              initDragCenter();
+              const res = calculateTimeFromClientPos(e.clientX, e.clientY);
+              setClockHover({
+                angle: res.angle,
+                time: res.time,
+                snappedLabel: res.snappedLabel,
+              });
+            }
+          : undefined
+      }
+      onPointerLeave={interactive ? () => setClockHover(null) : undefined}
+      onClick={
+        !interactive
+          ? () => {
+              if (isMobile) setIsMobileFullscreen(true);
+            }
+          : undefined
+      }
+    >
+      {/* Outer Ring Background Track */}
+      <circle
+        cx={center}
+        cy={center}
+        r={radius}
+        fill="none"
+        className="stroke-border dark:stroke-muted/60"
+        strokeWidth={strokeWidth}
+      />
+
+      {/* Generous invisible wide stroke for easy circumference dragging */}
+      <circle
+        cx={center}
+        cy={center}
+        r={radius}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={strokeWidth + 28}
+        className={interactive ? 'cursor-crosshair' : 'cursor-pointer'}
+      />
+
+      {/* Inner Decorative Dashed Ring */}
+      <circle
+        cx={center}
+        cy={center}
+        r={radius - strokeWidth - 6}
+        className="fill-muted/0 stroke-border/90"
+        strokeWidth="1"
+        strokeDasharray="4,4"
+      />
+
+      {/* Hour & Minute Markers */}
+      {hourMarkers}
+
+      {/* Rendered Task Arcs with Sharp Edges and Radial Control Bars */}
+      {renderedTaskArcs}
+
+      {/* Active Drag-to-Create Arc Preview */}
+      {interactive && previewArcElement}
+
+      {/* Live Radial Guide Needle */}
+      {interactive && liveNeedleElement}
+
+      {/* Center Hub Indicator */}
+      <circle
+        cx={center}
+        cy={center}
+        r="7"
+        className="fill-primary shadow-md"
+      />
+      <circle cx={center} cy={center} r="2.5" className="fill-background" />
+    </svg>
+  );
+
+  // Modal Content for Selected Task
+  const selectedTaskCard = selectedTask && (
+    <div className="w-full mt-4 p-4 rounded-xl bg-card border border-border shadow-xl text-card-foreground animate-in fade-in zoom-in-95 duration-200">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="w-3.5 h-3.5 rounded-full border border-border"
+            style={{
+              backgroundColor: isEditingSelected
+                ? editFormData.color || selectedTask.color
+                : selectedTask.color,
+            }}
+          />
+          <h4 className="text-sm font-bold text-foreground">
+            {isEditingSelected ? 'Edit Task' : selectedTask.name}
+          </h4>
+          {selectedTask.category && !isEditingSelected && (
+            <span className="px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
+              {selectedTask.category}
+            </span>
+          )}
+        </div>
+
+        <button
+          onClick={() => setSelectedTask(null)}
+          className="text-muted-foreground hover:text-foreground p-1 rounded"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {isEditingSelected ? (
+        <div className="space-y-3 pt-1">
+          <div>
+            <Label className="text-xs text-muted-foreground">Task Title</Label>
+            <Input
+              value={editFormData.name || ''}
+              onChange={(e) =>
+                setEditFormData({ ...editFormData, name: e.target.value })
+              }
+              className="h-8 text-xs bg-background border-input text-foreground mt-1"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Start Time</Label>
+              <Input
+                type="time"
+                value={editFormData.start_time || ''}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, start_time: e.target.value })
+                }
+                className="h-8 text-xs bg-background border-input text-foreground mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">End Time</Label>
+              <Input
+                type="time"
+                value={editFormData.end_time || ''}
+                onChange={(e) =>
+                  setEditFormData({ ...editFormData, end_time: e.target.value })
+                }
+                className="h-8 text-xs bg-background border-input text-foreground mt-1"
+              />
+            </div>
+          </div>
+
+          {/* Edit Overlap Warning */}
+          {editSelectedOverlapConflict && (
+            <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 text-xs flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+              <span>
+                Overlaps with "{editSelectedOverlapConflict.name}" (
+                {formatTime(editSelectedOverlapConflict.start_time)} –{' '}
+                {formatTime(editSelectedOverlapConflict.end_time)})
+              </span>
+            </div>
+          )}
+
+          {/* Color picker */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1.5 block">Color</Label>
+            <div className="grid grid-cols-6 gap-1.5">
+              {PRESET_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setEditFormData({ ...editFormData, color: c })}
+                  className={`h-5 rounded-full border transition-all ${
+                    editFormData.color === c
+                      ? 'border-primary scale-110'
+                      : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              size="sm"
+              onClick={handleSaveSelectedEdit}
+              disabled={!!editSelectedOverlapConflict}
+              className="h-7 text-xs flex-1 disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5 mr-1" />
+              Save Changes
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsEditingSelected(false)}
+              className="h-7 text-xs border-border text-foreground"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="text-xs text-muted-foreground font-mono mb-3">
+            {formatTime(selectedTask.start_time)} – {formatTime(selectedTask.end_time)} (
+            {formatDuration(
+              getTaskDuration(selectedTask.start_time, selectedTask.end_time)
+            )}
+            )
+          </div>
+
+          <div className="flex items-center gap-2 pt-1 border-t border-border/60">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsEditingSelected(true)}
+              className="h-7 px-2.5 text-xs text-foreground border-border"
+            >
+              <Edit2 className="w-3 h-3 mr-1" />
+              Edit
+            </Button>
+
+            {onSplitTask && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const startM = timeStringToMinutes(selectedTask.start_time);
+                  const dur = getTaskDuration(
+                    selectedTask.start_time,
+                    selectedTask.end_time
+                  );
+                  const midM = (startM + Math.floor(dur / 2)) % 1440;
+                  onSplitTask(selectedTask, minutesToTimeString(midM));
+                  setSelectedTask(null);
+                }}
+                className="h-7 px-2.5 text-xs text-foreground border-border"
+              >
+                <Scissors className="w-3 h-3 mr-1" />
+                Split in Half
+              </Button>
+            )}
+
+            {onDeleteTask && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  await onDeleteTask(selectedTask.id);
+                  setSelectedTask(null);
+                }}
+                className="h-7 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Delete
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Quick Task Creation Modal
+  const quickCreateModal = quickCreateOpen && (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-card text-card-foreground rounded-2xl p-6 border border-border shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-foreground">Create Task</h3>
+              <p className="text-xs text-muted-foreground">
+                {formatTime(newTaskData.start_time)} – {formatTime(newTaskData.end_time)}{' '}
+                (
+                {formatDuration(
+                  getTaskDuration(newTaskData.start_time, newTaskData.end_time)
+                )}
+                )
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setQuickCreateOpen(false)}
+            className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleCreateSubmit} className="space-y-4">
+          <div>
+            <Label className="text-xs text-muted-foreground font-medium">Task Name</Label>
+            <Input
+              autoFocus
+              required
+              placeholder="e.g. Deep Work, Gym, Reading"
+              value={newTaskData.name}
+              onChange={(e) =>
+                setNewTaskData({ ...newTaskData, name: e.target.value })
+              }
+              className="bg-background border-input text-foreground placeholder:text-muted-foreground mt-1"
+            />
+          </div>
+
+          {/* Quick Category Chips */}
+          <div>
+            <Label className="text-xs text-muted-foreground font-medium mb-1.5 block">
+              Category
+            </Label>
+            <div className="flex flex-wrap gap-1.5">
+              {PRESET_CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() =>
+                    setNewTaskData({ ...newTaskData, category: cat })
+                  }
+                  className={`px-2.5 py-1 rounded-lg text-xs transition-all ${
+                    newTaskData.category === cat
+                      ? 'bg-primary text-primary-foreground font-medium shadow-sm'
+                      : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Exact Times */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground font-medium">Start Time</Label>
+              <Input
+                type="time"
+                value={newTaskData.start_time}
+                onChange={(e) =>
+                  setNewTaskData({ ...newTaskData, start_time: e.target.value })
+                }
+                className="bg-background border-input text-foreground mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground font-medium">End Time</Label>
+              <Input
+                type="time"
+                value={newTaskData.end_time}
+                onChange={(e) =>
+                  setNewTaskData({ ...newTaskData, end_time: e.target.value })
+                }
+                className="bg-background border-input text-foreground mt-1"
+              />
+            </div>
+          </div>
+
+          {/* Quick Create Overlap Conflict Warning */}
+          {quickCreateOverlapConflict && (
+            <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
+              <span>
+                Cannot create: Overlaps with existing task "
+                {quickCreateOverlapConflict.name}" (
+                {formatTime(quickCreateOverlapConflict.start_time)} –{' '}
+                {formatTime(quickCreateOverlapConflict.end_time)})
+              </span>
+            </div>
+          )}
+
+          {/* Color Picker */}
+          <div>
+            <Label className="text-xs text-muted-foreground font-medium mb-2 block">
+              Color Tag
+            </Label>
+            <div className="grid grid-cols-6 gap-2">
+              {PRESET_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setNewTaskData({ ...newTaskData, color })}
+                  className={`h-7 rounded-lg border-2 transition-all ${
+                    newTaskData.color === color
+                      ? 'border-primary scale-110 shadow-md'
+                      : 'border-transparent hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="submit"
+              disabled={!!quickCreateOverlapConflict}
+              className="flex-1 font-semibold disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4 mr-1.5" />
+              Add Task
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setQuickCreateOpen(false)}
+              className="border-border text-foreground hover:bg-accent"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
+  // If in Mobile Fullscreen Editor Mode
+  if (isMobile && isMobileFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background/98 backdrop-blur-xl flex flex-col p-4 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95 duration-200">
+        {/* Fullscreen Header Bar */}
+        <div className="w-full flex items-center justify-between pb-3 border-b border-border mb-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-foreground">{period}</h3>
+              <p className="text-xs text-muted-foreground">
+                {isAMPeriod ? 'Day Period (06:00 – 18:00)' : 'Night Period (18:00 – 06:00)'}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => setIsMobileFullscreen(false)}
+            className="h-8 px-3.5 rounded-xl font-semibold gap-1.5 shadow-sm"
+          >
+            <Check className="w-4 h-4" />
+            Done
+          </Button>
+        </div>
+
+        {/* Fullscreen Toolbar */}
+        <div className="w-full flex items-center justify-between gap-2 mb-3 shrink-0">
+          <div className="flex items-center gap-1 bg-muted/80 rounded-xl p-1 border border-border">
+            <Button
+              size="sm"
+              variant={activeTool === 'draw' ? 'default' : 'ghost'}
+              onClick={() => setActiveTool('draw')}
+              className={`h-7 px-2.5 text-xs font-medium ${
+                activeTool === 'draw' ? 'shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Draw range on circle or drag control bars"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Draw
+            </Button>
+
+            <Button
+              size="sm"
+              variant={activeTool === 'split' ? 'destructive' : 'ghost'}
+              onClick={() => setActiveTool((prev) => (prev === 'split' ? 'draw' : 'split'))}
+              className={`h-7 px-2.5 text-xs font-medium ${
+                activeTool === 'split'
+                  ? 'shadow-sm'
+                  : 'text-muted-foreground hover:text-destructive'
+              }`}
+              title="Cut task arc directly at pointer time"
+            >
+              <Scissors className="w-3.5 h-3.5 mr-1" />
+              Split
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setMagneticSnap((prev) => !prev)}
+              className={`h-7 px-2.5 text-xs rounded-lg flex items-center gap-1 transition-all ${
+                magneticSnap
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold'
+                  : 'text-muted-foreground hover:text-foreground bg-muted/50 border border-border'
+              }`}
+              title="Magnetically snaps to ends and starts of neighboring tasks"
+            >
+              <Magnet className="w-3 h-3" />
+              <span>Snap</span>
+            </button>
+
+            <button
+              onClick={() => setSnapMinutes((prev) => (prev === 5 ? 15 : prev === 15 ? 1 : 5))}
+              className="h-7 text-xs px-2.5 rounded-lg bg-background text-foreground hover:bg-accent border border-border font-mono font-medium transition-colors"
+              title="Toggle time snapping precision (1m / 5m / 15m)"
+            >
+              {snapMinutes}m
+            </button>
+          </div>
+        </div>
+
+        {/* Live Pointer HUD */}
+        <div className="w-full flex items-center justify-between min-h-[32px] px-3 py-1 mb-2 rounded-lg bg-muted/40 border border-border/60 shrink-0">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                livePointerInfo?.overlap
+                  ? 'bg-red-500 animate-pulse'
+                  : livePointerInfo
+                  ? 'bg-primary animate-pulse'
+                  : 'bg-muted-foreground/40'
+              }`}
+            />
+            <span
+              className={`text-xs font-mono font-bold truncate ${
+                livePointerInfo?.overlap ? 'text-red-500 dark:text-red-400' : 'text-foreground'
+              }`}
+            >
+              {livePointerInfo ? livePointerInfo.label : 'Touch & drag along circle to draw task'}
+            </span>
+          </div>
+
+          {livePointerInfo?.overlap ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/30 animate-pulse flex items-center gap-1 shrink-0">
+              <AlertTriangle className="w-3 h-3 text-red-500" />
+              <span className="truncate max-w-[120px]">Overlaps: {livePointerInfo.overlap.name}</span>
+            </span>
+          ) : livePointerInfo?.snappedLabel ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 animate-pulse flex items-center gap-1 shrink-0">
+              <Magnet className="w-3 h-3" />
+              <span className="truncate max-w-[120px]">{livePointerInfo.snappedLabel}</span>
+            </span>
+          ) : null}
+        </div>
+
+        {/* Centered Large Interactive SVG Canvas */}
+        <div className="relative select-none my-auto w-full flex justify-center py-2">
+          {renderClockSvg(true)}
+        </div>
+
+        {/* Helper Footer Tips */}
+        <div className="w-full flex items-center justify-between text-[11px] text-muted-foreground px-2 mt-2 select-none border-t border-border/60 pt-2 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-primary" />
+            <span>
+              {activeTool === 'draw'
+                ? 'Drag circumference to add • Drag bars to resize • Tap task to edit'
+                : 'Tap any task arc to slice it at pointer time'}
+            </span>
+          </div>
+        </div>
+
+        {/* Selected Task Details & Edit Card */}
+        {selectedTaskCard}
+
+        {/* Quick Task Creation Modal */}
+        {quickCreateModal}
+      </div>
+    );
+  }
+
+  // Normal In-Page View (Display-only on phone; Fully interactive on desktop)
   return (
-    <div className="flex flex-col items-center glass-card p-4 sm:p-6 w-full max-w-[420px] mx-auto shadow-lg relative transition-colors duration-200">
+    <div
+      className={`flex flex-col items-center glass-card ${
+        isMobile ? 'p-3 sm:p-5 w-full max-w-[440px]' : 'p-4 sm:p-6 w-full max-w-[420px]'
+      } mx-auto shadow-lg relative transition-all duration-200 ${
+        isMobile ? 'cursor-pointer hover:border-primary/40' : ''
+      }`}
+      onClick={
+        isMobile && !isMobileFullscreen
+          ? () => setIsMobileFullscreen(true)
+          : undefined
+      }
+    >
       {/* Clock Header & Interactive Toolbar */}
       <div className="w-full flex flex-wrap items-center gap-2 justify-between mb-2 px-1">
         <div>
@@ -1118,174 +1736,144 @@ export default function CircularClock({
           </p>
         </div>
 
-        {/* Toolbar Buttons */}
-        <div className="flex items-center gap-1 bg-muted/70 rounded-xl p-1 border border-border">
+        {/* Mobile "Tap to Edit" button / Desktop Toolbar */}
+        {isMobile ? (
           <Button
             size="sm"
-            variant={activeTool === 'draw' ? 'default' : 'ghost'}
-            onClick={() => setActiveTool('draw')}
-            className={`h-7 px-2 sm:px-2.5 text-xs font-medium ${activeTool === 'draw'
-              ? 'shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-              }`}
-            title="Draw range on circle or drag control bars"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMobileFullscreen(true);
+            }}
+            className="h-8 px-3 text-xs bg-primary/10 text-primary hover:bg-primary/20 border border-primary/25 rounded-lg flex items-center gap-1.5 font-semibold"
           >
-            <Plus className="w-3.5 h-3.5 mr-1" />
-            Draw
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>Tap to Edit</span>
           </Button>
-
-          <Button
-            size="sm"
-            variant={activeTool === 'split' ? 'destructive' : 'ghost'}
-            onClick={() => setActiveTool((prev) => (prev === 'split' ? 'draw' : 'split'))}
-            className={`h-7 px-2 sm:px-2.5 text-xs font-medium ${activeTool === 'split'
-              ? 'shadow-sm'
-              : 'text-muted-foreground hover:text-destructive'
+        ) : (
+          <div className="flex items-center gap-1 bg-muted/70 rounded-xl p-1 border border-border">
+            <Button
+              size="sm"
+              variant={activeTool === 'draw' ? 'default' : 'ghost'}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTool('draw');
+              }}
+              className={`h-7 px-2 sm:px-2.5 text-xs font-medium ${
+                activeTool === 'draw'
+                  ? 'shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
-            title="Cut task arc directly at pointer time"
-          >
-            <Scissors className="w-3.5 h-3.5 mr-1" />
-            Split
-          </Button>
+              title="Draw range on circle or drag control bars"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              Draw
+            </Button>
 
-          {/* Magnetic Snap Toggle */}
-          <button
-            onClick={() => setMagneticSnap((prev) => !prev)}
-            className={`h-7 px-2 text-xs rounded-lg flex items-center gap-1 transition-all ${magneticSnap
-              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold'
-              : 'text-muted-foreground hover:text-foreground'
+            <Button
+              size="sm"
+              variant={activeTool === 'split' ? 'destructive' : 'ghost'}
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveTool((prev) => (prev === 'split' ? 'draw' : 'split'));
+              }}
+              className={`h-7 px-2 sm:px-2.5 text-xs font-medium ${
+                activeTool === 'split'
+                  ? 'shadow-sm'
+                  : 'text-muted-foreground hover:text-destructive'
               }`}
-            title="Magnetically snaps to ends and starts of neighboring tasks"
-          >
-            <Magnet className="w-3 h-3" />
-            <span className="hidden sm:inline">Snap: Task Ends</span>
-            <span className="sm:hidden">Snap</span>
-          </button>
+              title="Cut task arc directly at pointer time"
+            >
+              <Scissors className="w-3.5 h-3.5 mr-1" />
+              Split
+            </Button>
 
-          {/* Minute Snap Toggle */}
-          <button
-            onClick={() => setSnapMinutes((prev) => (prev === 5 ? 15 : prev === 15 ? 1 : 5))}
-            className="text-[11px] px-2 py-1 rounded-lg bg-background text-foreground hover:bg-accent border border-border font-mono transition-colors"
-            title="Toggle time snapping precision (1m / 5m / 15m)"
-          >
-            {snapMinutes}m
-          </button>
-        </div>
+            {/* Magnetic Snap Toggle */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMagneticSnap((prev) => !prev);
+              }}
+              className={`h-7 px-2 text-xs rounded-lg flex items-center gap-1 transition-all ${
+                magneticSnap
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Magnetically snaps to ends and starts of neighboring tasks"
+            >
+              <Magnet className="w-3 h-3" />
+              <span className="hidden sm:inline">Snap: Task Ends</span>
+              <span className="sm:hidden">Snap</span>
+            </button>
+
+            {/* Minute Snap Toggle */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSnapMinutes((prev) => (prev === 5 ? 15 : prev === 15 ? 1 : 5));
+              }}
+              className="text-[11px] px-2 py-1 rounded-lg bg-background text-foreground hover:bg-accent border border-border font-mono transition-colors"
+              title="Toggle time snapping precision (1m / 5m / 15m)"
+            >
+              {snapMinutes}m
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Live Pointer HUD */}
-      <div className="w-full flex items-center justify-between min-h-[32px] px-3 py-1 mb-2 rounded-lg bg-muted/40 border border-border/60">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <div
-            className={`w-2 h-2 rounded-full shrink-0 ${livePointerInfo?.overlap
-              ? 'bg-red-500 animate-pulse'
-              : livePointerInfo
-                ? 'bg-primary animate-pulse'
-                : 'bg-muted-foreground/40'
-              }`}
-          />
-          <span
-            className={`text-xs font-mono font-bold truncate ${livePointerInfo?.overlap ? 'text-red-500 dark:text-red-400' : 'text-foreground'
-              }`}
-          >
-            {livePointerInfo ? livePointerInfo.label : 'Hover or drag clock circumference'}
+      {/* Live Pointer HUD (or Mobile Display Banner) */}
+      {isMobile ? (
+        <div className="w-full flex items-center justify-between px-3 py-1.5 mb-2 rounded-lg bg-primary/5 border border-primary/15 text-xs text-primary font-medium hover:bg-primary/10 transition-colors">
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-primary" />
+            Display mode • Tap clock to edit in full screen
           </span>
-          {livePointerInfo?.secondary && (
-            <span className="text-[11px] text-muted-foreground font-mono truncate hidden sm:inline">
-              ({livePointerInfo.secondary})
+          <Maximize2 className="w-3.5 h-3.5 text-primary shrink-0" />
+        </div>
+      ) : (
+        <div className="w-full flex items-center justify-between min-h-[32px] px-3 py-1 mb-2 rounded-lg bg-muted/40 border border-border/60">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                livePointerInfo?.overlap
+                  ? 'bg-red-500 animate-pulse'
+                  : livePointerInfo
+                  ? 'bg-primary animate-pulse'
+                  : 'bg-muted-foreground/40'
+              }`}
+            />
+            <span
+              className={`text-xs font-mono font-bold truncate ${
+                livePointerInfo?.overlap ? 'text-red-500 dark:text-red-400' : 'text-foreground'
+              }`}
+            >
+              {livePointerInfo ? livePointerInfo.label : 'Hover or drag clock circumference'}
             </span>
-          )}
+            {livePointerInfo?.secondary && (
+              <span className="text-[11px] text-muted-foreground font-mono truncate hidden sm:inline">
+                ({livePointerInfo.secondary})
+              </span>
+            )}
+          </div>
+
+          {livePointerInfo?.overlap ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/30 animate-pulse flex items-center gap-1 shrink-0">
+              <AlertTriangle className="w-3 h-3 text-red-500" />
+              <span className="truncate max-w-[110px] sm:max-w-[160px]">
+                Overlaps with "{livePointerInfo.overlap.name}"
+              </span>
+            </span>
+          ) : livePointerInfo?.snappedLabel ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 animate-pulse flex items-center gap-1 shrink-0">
+              <Magnet className="w-3 h-3" />
+              <span className="truncate max-w-[120px]">{livePointerInfo.snappedLabel}</span>
+            </span>
+          ) : null}
         </div>
+      )}
 
-        {/* Live Overlap or Magnetic Snap Badge */}
-        {livePointerInfo?.overlap ? (
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-600 dark:text-red-300 border border-red-500/30 animate-pulse flex items-center gap-1 shrink-0">
-            <AlertTriangle className="w-3 h-3 text-red-500" />
-            <span className="truncate max-w-[110px] sm:max-w-[160px]">Overlaps with "{livePointerInfo.overlap.name}"</span>
-          </span>
-        ) : livePointerInfo?.snappedLabel ? (
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30 animate-pulse flex items-center gap-1 shrink-0">
-            <Magnet className="w-3 h-3" />
-            <span className="truncate max-w-[120px]">{livePointerInfo.snappedLabel}</span>
-          </span>
-        ) : null}
-      </div>
-
-      {/* Main Interactive SVG Canvas */}
+      {/* SVG Canvas (Non-interactive on mobile for smooth scrolling; Interactive on desktop) */}
       <div className="relative select-none my-1 w-full flex justify-center">
-        <svg
-          ref={svgRef}
-          viewBox={isMobile ? "-60 -15 500 410" : "0 0 380 380"}
-          className={`w-full max-w-[380px] sm:max-w-[400px] h-auto aspect-square overflow-visible touch-none select-none mx-auto ${activeTool === 'split'
-            ? 'cursor-cell'
-            : dragState?.type === 'move-arc'
-              ? 'cursor-grabbing'
-              : 'cursor-crosshair'
-            }`}
-          onPointerDown={handleRingPointerDown}
-          onPointerMove={(e) => {
-            initDragCenter();
-            const res = calculateTimeFromClientPos(e.clientX, e.clientY);
-            setClockHover({
-              angle: res.angle,
-              time: res.time,
-              snappedLabel: res.snappedLabel,
-            });
-          }}
-          onPointerLeave={() => setClockHover(null)}
-        >
-          {/* Outer Ring Background Track */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            className="stroke-border dark:stroke-muted/60"
-            strokeWidth={strokeWidth}
-          />
-
-          {/* Generous invisible wide stroke for easy circumference dragging */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius}
-            fill="none"
-            stroke="transparent"
-            strokeWidth={strokeWidth + 28}
-            className="cursor-crosshair"
-          />
-          {/* TODO*/}
-          {/* Inner Decorative Dashed Ring */}
-          <circle
-            cx={center}
-            cy={center}
-            r={radius - strokeWidth - 6}
-            className="fill-muted/0 stroke-border/90 "
-            strokeWidth="1"
-            strokeDasharray="4,4"
-          />
-
-          {/* Hour & Minute Markers */}
-          {hourMarkers}
-
-          {/* Rendered Task Arcs with Sharp Edges and Radial Control Bars */}
-          {renderedTaskArcs}
-
-          {/* Active Drag-to-Create Arc Preview */}
-          {previewArcElement}
-
-          {/* Live Radial Guide Needle */}
-          {liveNeedleElement}
-
-          {/* Center Hub Indicator */}
-          <circle
-            cx={center}
-            cy={center}
-            r="7"
-            className="fill-primary shadow-md "
-          />
-          <circle cx={center} cy={center} r="2.5" className="fill-background" />
-        </svg>
+        {renderClockSvg(!isMobile)}
       </div>
 
       {/* Helper Footer Tips */}
@@ -1293,345 +1881,20 @@ export default function CircularClock({
         <div className="flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5 text-primary" />
           <span>
-            {activeTool === 'draw'
+            {isMobile
+              ? 'Tap anywhere on the clock to open full screen editor'
+              : activeTool === 'draw'
               ? 'Drag radial bars to set time • Pie lines show task partitions'
               : 'Click on any task arc to slice it at pointer time'}
           </span>
         </div>
       </div>
 
-      {/* Selected Task Details & Actions Card */}
-      {selectedTask && (
-        <div className="w-full mt-4 p-4 rounded-xl bg-card border border-border shadow-xl text-card-foreground animate-in fade-in zoom-in-95 duration-200">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span
-                className="w-3.5 h-3.5 rounded-full border border-border"
-                style={{
-                  backgroundColor: isEditingSelected
-                    ? editFormData.color || selectedTask.color
-                    : selectedTask.color,
-                }}
-              />
-              <h4 className="text-sm font-bold text-foreground">
-                {isEditingSelected ? 'Edit Task' : selectedTask.name}
-              </h4>
-              {selectedTask.category && !isEditingSelected && (
-                <span className="px-2 py-0.5 text-[10px] rounded-full bg-secondary text-secondary-foreground">
-                  {selectedTask.category}
-                </span>
-              )}
-            </div>
+      {/* Selected Task Details & Actions Card (Desktop) */}
+      {!isMobile && selectedTaskCard}
 
-            <button
-              onClick={() => setSelectedTask(null)}
-              className="text-muted-foreground hover:text-foreground p-1 rounded"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {isEditingSelected ? (
-            <div className="space-y-3 pt-1">
-              <div>
-                <Label className="text-xs text-muted-foreground">Task Title</Label>
-                <Input
-                  value={editFormData.name || ''}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, name: e.target.value })
-                  }
-                  className="h-8 text-xs bg-background border-input text-foreground mt-1"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Start Time</Label>
-                  <Input
-                    type="time"
-                    value={editFormData.start_time || ''}
-                    onChange={(e) =>
-                      setEditFormData({ ...editFormData, start_time: e.target.value })
-                    }
-                    className="h-8 text-xs bg-background border-input text-foreground mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">End Time</Label>
-                  <Input
-                    type="time"
-                    value={editFormData.end_time || ''}
-                    onChange={(e) =>
-                      setEditFormData({ ...editFormData, end_time: e.target.value })
-                    }
-                    className="h-8 text-xs bg-background border-input text-foreground mt-1"
-                  />
-                </div>
-              </div>
-
-              {/* Edit Overlap Warning */}
-              {editSelectedOverlapConflict && (
-                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 text-xs flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>
-                    Overlaps with "{editSelectedOverlapConflict.name}" (
-                    {formatTime(editSelectedOverlapConflict.start_time)} –{' '}
-                    {formatTime(editSelectedOverlapConflict.end_time)})
-                  </span>
-                </div>
-              )}
-
-              {/* Color picker */}
-              <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Color</Label>
-                <div className="grid grid-cols-6 gap-1.5">
-                  {PRESET_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setEditFormData({ ...editFormData, color: c })}
-                      className={`h-5 rounded-full border transition-all ${editFormData.color === c
-                        ? 'border-primary scale-110'
-                        : 'border-transparent hover:scale-105'
-                        }`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={handleSaveSelectedEdit}
-                  disabled={!!editSelectedOverlapConflict}
-                  className="h-7 text-xs flex-1 disabled:opacity-50"
-                >
-                  <Check className="w-3.5 h-3.5 mr-1" />
-                  Save Changes
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsEditingSelected(false)}
-                  className="h-7 text-xs border-border text-foreground"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div className="text-xs text-muted-foreground font-mono mb-3">
-                {formatTime(selectedTask.start_time)} – {formatTime(selectedTask.end_time)} (
-                {formatDuration(
-                  getTaskDuration(selectedTask.start_time, selectedTask.end_time)
-                )}
-                )
-              </div>
-
-              <div className="flex items-center gap-2 pt-1 border-t border-border/60">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsEditingSelected(true)}
-                  className="h-7 px-2.5 text-xs text-foreground border-border"
-                >
-                  <Edit2 className="w-3 h-3 mr-1" />
-                  Edit
-                </Button>
-
-                {onSplitTask && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const startM = timeStringToMinutes(selectedTask.start_time);
-                      const dur = getTaskDuration(
-                        selectedTask.start_time,
-                        selectedTask.end_time
-                      );
-                      const midM = (startM + Math.floor(dur / 2)) % 1440;
-                      onSplitTask(selectedTask, minutesToTimeString(midM));
-                      setSelectedTask(null);
-                    }}
-                    className="h-7 px-2.5 text-xs text-foreground border-border"
-                  >
-                    <Scissors className="w-3 h-3 mr-1" />
-                    Split in Half
-                  </Button>
-                )}
-
-                {onDeleteTask && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      await onDeleteTask(selectedTask.id);
-                      setSelectedTask(null);
-                    }}
-                    className="h-7 px-2.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 ml-auto"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-1" />
-                    Delete
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Quick Task Creation Modal */}
-      {quickCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="bg-card text-card-foreground rounded-2xl p-6 border border-border shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">Create Task</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {formatTime(newTaskData.start_time)} – {formatTime(newTaskData.end_time)}{' '}
-                    (
-                    {formatDuration(
-                      getTaskDuration(newTaskData.start_time, newTaskData.end_time)
-                    )}
-                    )
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setQuickCreateOpen(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div>
-                <Label className="text-xs text-muted-foreground font-medium">Task Name</Label>
-                <Input
-                  autoFocus
-                  required
-                  placeholder="e.g. Deep Work, Gym, Reading"
-                  value={newTaskData.name}
-                  onChange={(e) =>
-                    setNewTaskData({ ...newTaskData, name: e.target.value })
-                  }
-                  className="bg-background border-input text-foreground placeholder:text-muted-foreground mt-1"
-                />
-              </div>
-
-              {/* Quick Category Chips */}
-              <div>
-                <Label className="text-xs text-muted-foreground font-medium mb-1.5 block">
-                  Category
-                </Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {PRESET_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() =>
-                        setNewTaskData({ ...newTaskData, category: cat })
-                      }
-                      className={`px-2.5 py-1 rounded-lg text-xs transition-all ${newTaskData.category === cat
-                        ? 'bg-primary text-primary-foreground font-medium shadow-sm'
-                        : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                        }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Exact Times */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground font-medium">Start Time</Label>
-                  <Input
-                    type="time"
-                    value={newTaskData.start_time}
-                    onChange={(e) =>
-                      setNewTaskData({ ...newTaskData, start_time: e.target.value })
-                    }
-                    className="bg-background border-input text-foreground mt-1"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground font-medium">End Time</Label>
-                  <Input
-                    type="time"
-                    value={newTaskData.end_time}
-                    onChange={(e) =>
-                      setNewTaskData({ ...newTaskData, end_time: e.target.value })
-                    }
-                    className="bg-background border-input text-foreground mt-1"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Create Overlap Conflict Warning */}
-              {quickCreateOverlapConflict && (
-                <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>
-                    Cannot create: Overlaps with existing task "
-                    {quickCreateOverlapConflict.name}" (
-                    {formatTime(quickCreateOverlapConflict.start_time)} –{' '}
-                    {formatTime(quickCreateOverlapConflict.end_time)})
-                  </span>
-                </div>
-              )}
-
-              {/* Color Picker */}
-              <div>
-                <Label className="text-xs text-muted-foreground font-medium mb-2 block">
-                  Color Tag
-                </Label>
-                <div className="grid grid-cols-6 gap-2">
-                  {PRESET_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setNewTaskData({ ...newTaskData, color })}
-                      className={`h-7 rounded-lg border-2 transition-all ${newTaskData.color === color
-                        ? 'border-primary scale-110 shadow-md'
-                        : 'border-transparent hover:scale-105'
-                        }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  type="submit"
-                  disabled={!!quickCreateOverlapConflict}
-                  className="flex-1 font-semibold disabled:opacity-50"
-                >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  Add Task
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setQuickCreateOpen(false)}
-                  className="border-border text-foreground hover:bg-accent"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Quick Task Creation Modal (Desktop) */}
+      {!isMobile && quickCreateModal}
     </div>
   );
 }
